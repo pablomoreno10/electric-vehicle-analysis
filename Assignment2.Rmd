@@ -1,0 +1,516 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Research Questions: 
+
+**Base MSRP**: Is there a difference in the base MSRP of EVs that are full battery electric and those that are plug-in hybrid?
+
+**Electric Range**: Do battery electric EV have, on average, more range than plug-in hybrids?
+
+----
+
+
+**Base MSRP Hypotheses**
+
+$H_0$ : There is no difference in the base MSRP of Evs that are full battery electric and those that are plug-in hybrid.
+$H_1$ : Evs that are full battery electric have a higher base MSRP than those that are plugin hybrid.
+
+**Electric Range Hypotheses**
+
+$H_0$ : There is no difference in electric range between battery electric EVs and plug-in hybrids.
+$H_1$ : Battery electric EVs have a greater electric range than plug-in hybrids.
+
+----
+
+Load in all packages that you may require for this assignment in this chunk.
+Define some colours to be used in visualization (if you want, you don't need to use these). 
+
+```{r}
+library(splitstackshape)
+library(moments)
+colours <- c("#B21807","#E69F00","#542788","#8B572A", "#7F8C8D", "#F1C40F", "#8E202B", "#E1B12C","#A11A4D")
+```
+
+Load the data and remove any row that contains NAs (there aren't any, but still good practice)
+
+```{r, load the data}
+evData <- read.csv("/Users/pablo/Downloads/evData.csv", stringsAsFactors = TRUE)
+evData <- na.omit(evData)
+```
+
+```{r}
+str(evData)
+head(evData)
+```
+
+* The data set contains 204989 observations and 18 variables.
+* Quantitative variables include Electric.Range, Base.MSRP, Model.Year and the rest of the variables are qualitative.
+* - Ratio Scale: Electric.Range, Base.MSRP
+  - Ordinal: Model.Year
+  - Categorical: Make, Model, Postal.Code, Electric.Vehicle.Type, X2020.Census.Tract...
+
+Visualize the distribution of the Electric Range and Base MSRP variables in the data set. You may need to transform a or both variables in order to better visualize their distribution. 
+
+```{r, electric range}
+#One invalid entry with both MSRP and Electric Range equal to 0 was excluded from the analysis, as it clearly represented incorrect/missing data.
+evDataClean <- subset(evData, !(Base.MSRP == 0 & Electric.Range == 0))
+#Electric range summary
+mean(evDataClean$Electric.Range)
+median(evDataClean$Electric.Range)
+kurtosis(evDataClean$Electric.Range)
+range(evDataClean$Electric.Range)
+sd(evDataClean$Electric.Range)
+```
+```{r}
+hist(evDataClean$Electric.Range)
+```
+```{r}
+boxplot(evDataClean$Electric.Range,main = "Boxplot of Electric Range", xlab = "Electric Range", horizontal = TRUE)
+```
+
+```{r, base MSRP}
+mean(evDataClean$Base.MSRP)
+median(evDataClean$Base.MSRP)
+range(evDataClean$Base.MSRP) #Range fixed after dropping suspicious row
+kurtosis(evDataClean$Base.MSRP)
+sd(evDataClean$Base.MSRP)
+```
+```{r}
+hist(log(evDataClean$Base.MSRP))
+```
+```{r}
+boxplot(log(evDataClean$Base.MSRP),main = "Boxplot of Base MSRP", xlab = "Log Base MSRP", horizontal = TRUE)
+```
+
+*Electric Range:* 
+- The distribution of electric range is not normally distributed. 
+- The mean is 223.6249 and the median is 258, indicating that the distribution is negatively skewed. 
+- The shape of this distribution is platykurtic since the its kurtosis value is 2.09 which is less than 3. 
+- All the values appear to be sensible as there are no negative or unrealistic values.
+
+*Base MSRP:* 
+- The distribution of base MSRP is also not normally distributed. 
+- The shape of this distribution is positively skewed. 
+- The mean is 47465.69 and the median is 42990 which explains the skewness of the data. 
+- Clearly there are some cars that have a much higher MSRP which possible in the car industry, as some cars are just more expensive. Therefore, I had to use log() to make the histogram clearer. 
+- Additionally, the distribution is leptokurtic, its kurtosis value is 32.6 and it is expected since it has outliers. 
+- There are scores that are equal to 0 indicating that all the values are not sensible in this distribution.
+
+Are there any associations between a car's MSRP, electric range, and year of production? 
+
+```{r}
+#create a subset of the variables because running the function cor() on the whole data set will not work since not all values are numeric
+subsetEv <- evData[, c("Base.MSRP", "Electric.Range", "Model.Year")]
+corEv <- cor(subsetEv, method = "spearman") #Spearman is more suitable for data with ouliers/non-normal
+corEv
+# corEv2 <- cor(subsetEv, method= "pearson")
+```
+
+```{r}
+library(corrplot)
+```
+
+```{r}
+corrplot(corEv, method = "ellipse", type = "upper", diag = FALSE, tl.col = "gray")
+```
+
+- The strongest correlation is between Base MSRP and Electric Range (0.37), indicating that higher-priced vehicles tend to offer greater electric range, it would not be a surprise that more luxurious Evs have superior batteries.
+
+- There was also a positive correlation between Base MSRP and Model Year (0.27), suggesting that newer EVs tend to be slightly more expensive. At first, I was expecting a higher association, but the variety of brands and models likely explains it.
+
+- Finally, Electric Range and Model Year showed the weakest correlation (0.18), implying that while EV range has improved over time, the model year alone may not be enough to draw strong conclusions about electric range.
+
+
+There are two main types of EVs in this data set: battery electric and plug-in hybrids. 
+
+It may be informative to see if there are any differences between their costs (base MSRP) and electric range. 
+
+You will do this in two steps, first use box plots to compare the distributions of MSRP and electric range for both EV types
+
+```{r, boxplot of electric range}
+boxplot(Electric.Range ~ Electric.Vehicle.Type, data = evDataClean, main = "Electric Range by EV Type", xlab = "EV Type", ylab = "Electric Range", col = c("pink","lightblue"))
+```
+
+```{r, boxplot of base MSRP}
+boxplot(log(Base.MSRP) ~ Electric.Vehicle.Type, data = evDataClean, main = "Base MSRP by EV Type", xlab = "EV Type", ylab = "Base MSRP", col = c("pink","skyblue"))
+#Maybe log transformation is not necessary, since normal boxplots also show that they are very similar and that there are outliers
+```
+
+Second, calculate the point biserial correlation coefficient between EV type and our two quantitative variables. 
+
+```{r, point biserial electric range}
+m1 <- mean(evDataClean$Electric.Range[evDataClean$Electric.Vehicle.Type == "Battery Electric Vehicle (BEV)"])
+m2 <- mean(evDataClean$Electric.Range[evDataClean$Electric.Vehicle.Type == "Plug-in Hybrid Electric Vehicle (PHEV)"])
+
+sd1 <- sd(evDataClean$Electric.Range)
+
+# Proportions
+prop1 <- sum(evDataClean$Electric.Vehicle.Type == "Battery Electric Vehicle (BEV)") / nrow(evDataClean)
+prop2 <- sum(evDataClean$Electric.Vehicle.Type == "Plug-in Hybrid Electric Vehicle (PHEV)") / nrow(evDataClean)
+
+# Point biserial correlation
+rpb_range <- ((m1 - m2) / sd1) * sqrt(prop1 * prop2)
+rpb_range
+```
+```{r, point biserial base MSRP}
+M1 <- mean(evDataClean$Base.MSRP[evDataClean$Electric.Vehicle.Type == "Battery Electric Vehicle (BEV)"])
+M2 <- mean(evDataClean$Base.MSRP[evDataClean$Electric.Vehicle.Type == "Plug-in Hybrid Electric Vehicle (PHEV)"])
+
+SD1 <- sd(evDataClean$Base.MSRP)
+
+rpb <- ((M1 - M2) / SD1) * sqrt(prop1 * prop2)
+rpb
+```
+After performing point biserial correlations and creating boxplot visualizations to compare (BEVs) and (PHEVs) in relation to Base MSRP and Electric Range, I found the following:
+  - *Electric Range*: The point biserial correlation between EV type and electric range is 0.84, indicating a very strong positive association. This means that BEVs are strongly associated with higher electric ranges. The boxplot also supports this conclusion, showing that the majority of BEVs have greater electric range values compared to PHEVs.
+  - *Base MSRP*: The point biserial correlation for EV type and base MSRP is only 0.06, suggesting little association between vehicle type and MSRP. In other words, being a BEV or PHEV does not clearly predict whether a vehicle will be more or less expensive. This is further supported by the boxplots, which show that both BEVs and PHEVs have similar cost distributions, with no major visual distinction.
+
+Build a 95% bootstrap confidence interval for the electric range of EVs. Use 1000 samples of size (n) 100. 
+
+```{r}
+set.seed(123)
+N <- 1000
+n <- 100
+sampleMean <- NULL
+for (i in 1:N){
+  sampledScores <- sample(evDataClean$Electric.Range, n, replace = TRUE)
+  sampleMean[i] <- mean(sampledScores)
+}
+mean(sampleMean)
+quantile(sampleMean, c(0.025, 0.975))
+```
+
+The 95% confidence interval for the electric range lies between 200.18 and 244.9420. Therefore, we could be 95% confident that the true mean electric range of all EVs in Washington falls within this range.
+
+Increase the sample size to 500. 
+
+```{r}
+n2 <- 500
+sampleMean2 <- NULL
+for (i in 1:N){
+  sampledScores <- sample(evDataClean$Electric.Range, n2, replace = TRUE)
+  sampleMean2[i] <- mean(sampledScores)
+}
+mean(sampleMean2)
+quantile(sampleMean2, c(0.025, 0.975))
+```
+*How does this change the confidence interval and why?*
+
+The confidence interval became smaller, this makes sense since getting more samples results in less variability in each sample mean as it is more accurate.
+
+```{r}
+n3 <- 100
+sampleMean3 <- NULL
+for (i in 1:N){
+  sampledScores3 <- sample(evDataClean$Base.MSRP, n3, replace = TRUE)
+  sampleMean3[i] <- mean(sampledScores3)
+}
+mean(sampleMean3)
+mean(evDataClean$Base.MSRP)
+quantile(sampleMean3, c(0.025, 0.975))
+```
+
+You may have noticed that the number of battery electric and the number of plug-in hybrid cars differs in this data set
+
+```{r}
+table(evData$Electric.Vehicle.Type)
+```
+
+Build a stratified sample based on the EV type. 
+
+```{r}
+#I googled a lot for this question
+bevRows <- evDataClean[evDataClean$Electric.Vehicle.Type == "Battery Electric Vehicle (BEV)", ] #Select all rows in dataset that are BEVs
+phevRows <- evDataClean[evDataClean$Electric.Vehicle.Type == "Plug-in Hybrid Electric Vehicle (PHEV)", ] #Select all rows in dataset that are PHEVs
+
+#sample 20000 observations from each type 
+bevSample <- bevRows[sample(1:nrow(bevRows), 20000, replace = TRUE), ] 
+phevSample <- phevRows[sample(1:nrow(phevRows), 20000, replace = TRUE), ]
+
+#rbind- binds rows together
+evDataStratified <- rbind(bevSample, phevSample)
+table(evDataStratified$Electric.Vehicle.Type)
+```
+
+Calculate a 95% confidence interval for electric range on the stratified data.
+
+```{r}
+N <- 1000      
+n <- 2000 #I increased the sample size because this dataframe is bigger 
+sampleMean <- NULL
+
+for (i in 1:N){
+  sampledScores <- sample(evDataStratified$Electric.Range, n, replace = TRUE)
+  sampleMean[i] <- mean(sampledScores)
+}
+
+# Bootstrap results
+mean(sampleMean)
+quantile(sampleMean, c(0.025, 0.975))
+```
+
+The confidence interval from the stratified sample (147.79 to 159.78) is very different from the one based on the full dataset (213.31 to 233.73).
+
+This is because the stratified sample was balanced to have the same number of BEVs and PHEVs, while the full dataset contains more BEVs. As found earlier, BEVs tend to have a higher electric range than PHEVs, so they pull the average electric range higher in the full dataset.
+
+The stratified confidence interval reflects a balanced mix, while the full dataset reflects a more realistic picture of EVs in Washington.
+
+
+Build a sampling distribution of means for the electric range of EVs in the data set `evData` (the original data set) by sampling 2000 samples of size 300 with replacement. 
+
+```{r}
+set.seed(123)  
+
+N5 <- 2000      # Number of samples
+n5 <- 300       # Sample size
+sampleMeans5 <- NULL # Empty vector to store the means
+
+for (i in 1:N5) {
+  sample5 <- sample(evDataClean$Electric.Range, n5, replace = TRUE)
+  sampleMeans5[i] <- mean(sample5)
+}
+
+mean(sampleMeans5)
+mean(evDataClean$Electric.Range)
+```
+
+#### Question 4.1 (1 point)
+
+What is the proportion of scores that have an electric range of less than 220 miles?
+
+```{r}
+mean(sampleMeans5 < 220)
+```
+What is the proportion of scores that have an electric range equal to or greater than 210 miles?
+
+```{r}
+mean(sampleMeans5 >= 210)
+```
+
+```{r}
+mean(sampleMeans5 >= 125 & sampleMeans5 <= 232)
+```
+
+What is the electric range of the 87th percentile? 
+
+```{r}
+quantile(sampleMeans5, probs= c(0.87))
+```
+
+What is the electric range of the 23rd percentile? 
+
+```{r}
+quantile(sampleMeans5, probs= c(0.23))
+```
+The electric range of the 23rd percentile is 218.6.
+
+```{r}
+quantile(sampleMeans5, probs= c(0.5))
+```
+The electric range of the 2nd quartile is 223.82.
+
+```{r}
+#Equation is Z = x(Score/range) - mean / standard deviation
+mean(sampleMeans5) + 1.45 * sd(sampleMeans5)
+```
+```{r}
+quantile(sampleMeans5, probs= c(0.77))
+```
+228.83 lies above 77% of all scores.
+
+
+```{r}
+mean(sampleMeans5 < 230 | sampleMeans5 > 242)
+```
+82% of scores fall outside of an electric range between 230 and 242 miles.
+
+```{r}
+x = mean(sampleMeans5) + 0.71 * sd(sampleMeans5)
+mean(sampleMeans5 > x)
+```
+
+22% of scores lie above a z score of 0.71.
+
+Using a normal distribution of MSRPs with a of mean \$47,466.02 and a standard deviation of \$16.549.63, answer the following questions.
+
+What proportion of scores fall above a value of $50,000
+
+```{r}
+pnorm(50000, mean = 47466.02, sd = 16549.63, lower.tail = FALSE)
+```
+43% of values fall above a value of \$50,000
+
+
+What z score does a car with an MSRP of \$38,674.43 have?
+
+```{r}
+#Equation is Z = x(Score/range) - mean / standard deviation
+z <- (38674.43 - 47466.02) / 16549.63
+z
+```
+The z score a car with an MSRP of \$38,674.43 is -0.53.
+
+
+What proportion of scores fall below the above calculated z score?
+
+```{r}
+pnorm(z)
+```
+29% of scores fall below the z score.
+
+
+What MSRP value exceeds 95\% of all scores in the distribution?
+
+```{r}
+qnorm(0.95, mean = 47466.02, sd = 16549.63)
+```
+The MSRP value of 74687.74 exceeds 95% of all scores in the distribution. It makes sense looking back at the previous analysis.
+
+
+What are the MSRP values of Q1 and Q3? 
+
+```{r}
+#qnorm scores/values - pnorm proportions
+
+Q1 <- qnorm(0.25, mean = 47466.02, sd = 16549.63)
+Q3 <- qnorm(0.75, mean = 47466.02, sd = 16549.63)
+Q3
+Q1
+```
+Q1 = 36303.46
+Q3 = 58628.58
+
+
+Use a **permutation test** to test the two null hypotheses.
+
+**Electric Range**
+
+$H_0$ : There is no difference in electric range between battery electric EVs and plug-in hybrids.
+$H_1$ : Battery electric EVs have a greater electric range than plug-in hybrids.
+
+```{r}
+bevRows <- evDataClean[evDataClean$Electric.Vehicle.Type == "Battery Electric Vehicle (BEV)", ]
+phevRows <- evDataClean[evDataClean$Electric.Vehicle.Type == "Plug-in Hybrid Electric Vehicle (PHEV)", ]
+
+# Observed median difference (BEV - PHEV)
+obs_diff <- median(bevRows$Electric.Range) - median(phevRows$Electric.Range)
+
+```
+```{r}
+thePermutationFunction <- function(values, nA, nB) {
+  N <- nA + nB
+  idxA <- sample(1:N, nA, replace = FALSE)
+  idxB <- setdiff(1:N, idxA)
+  medianDiff <- median(values[idxA]) - median(values[idxB])
+  return(medianDiff)
+}
+
+set.seed(123) 
+combinedRanges <- c(bevRows$Electric.Range, phevRows$Electric.Range)
+nBEV <- nrow(bevRows)
+nPHEV <- nrow(phevRows)
+
+n_permutations <- 2000
+null_distribution <- numeric(n_permutations)
+
+for (i in 1:n_permutations) {
+  null_distribution[i] <- thePermutationFunction(combinedRanges, nBEV, nPHEV)
+}
+```
+
+```{r}
+alpha <- 0.05
+p_value <- mean(null_distribution >= obs_diff)
+```
+
+A permutation test was conducted to determine whether battery electric vehicles (BEVs) have greater electric range than plug-in hybrid electric vehicles (PHEVs).
+
+The observed median difference was 242 miles, with BEVs having the higher range.
+
+Based on 2,000 permutations, none of the resampled median differences were greater than or equal to the observed value, resulting in a p-value of 0.
+
+This result is statistically significant at the alpha level, providing strong evidence that BEVs have significantly greater electric range than PHEVs.
+
+**Base MSRP Hypotheses**
+
+$H_0$ : There is no difference in the base MSRP of Evs that are full battery electric and those that are plug-in hybrid.
+$H_1$ : Evs that are full battery electric have a higher base MSRP than those that are plugin hybrid.
+
+
+```{r}
+medianBEV_msrp <- median(bevRows$Base.MSRP)
+medianPHEV_msrp <- median(phevRows$Base.MSRP)
+obs_diff_msrp <- medianBEV_msrp - medianPHEV_msrp
+combinedMSRP <- c(bevRows$Base.MSRP, phevRows$Base.MSRP)
+nBEV <- nrow(bevRows)
+nPHEV <- nrow(phevRows)
+thePermutationFunction <- function(values, nA, nB) {
+  N <- nA + nB
+  idxA <- sample(1:N, nA, replace = FALSE)
+  idxB <- setdiff(1:N, idxA)
+  return(median(values[idxA]) - median(values[idxB]))
+}
+set.seed(123)
+n_permutations <- 2000
+null_distribution_msrp <- numeric(n_permutations)
+
+for (i in 1:n_permutations) {
+  null_distribution_msrp[i] <- thePermutationFunction(combinedMSRP, nBEV, nPHEV)
+}
+```
+
+```{r}
+pValueMSRP <- mean(null_distribution_msrp >= obs_diff_msrp)
+```
+
+The p-value (p = 1.00) is much greater than the significance level (α = 0.05), indicating that the observed difference in Base MSRP could easily occur by random chance. Therefore, we fail to reject the null hypothesis and conclude that there is no evidence that BEVs have a higher base MSRP than PHEVs.
+
+Repeat the permutation test on Electric Range using the `evDataStratified` data set you built in Question 3. 
+
+```{r}
+bevStrat <- evDataStratified[evDataStratified$Electric.Vehicle.Type == "Battery Electric Vehicle (BEV)", ]
+phevStrat <- evDataStratified[evDataStratified$Electric.Vehicle.Type == "Plug-in Hybrid Electric Vehicle (PHEV)", ]
+
+obs_diff_strat <- median(bevStrat$Electric.Range) - median(phevStrat$Electric.Range)
+
+
+combinedRangeStrat <- c(bevStrat$Electric.Range, phevStrat$Electric.Range)
+nBEV_strat <- nrow(bevStrat)
+nPHEV_strat <- nrow(phevStrat)
+
+
+thePermutationFunction <- function(values, nA, nB) {
+  N <- nA + nB
+  idxA <- sample(1:N, nA, replace = FALSE)
+  idxB <- setdiff(1:N, idxA)
+  return(median(values[idxA]) - median(values[idxB]))
+}
+
+
+set.seed(123)
+n_perm <- 2000
+null_distribution_strat <- numeric(n_perm)
+
+for (i in 1:n_perm) {
+  null_distribution_strat[i] <- thePermutationFunction(combinedRangeStrat, nBEV_strat, nPHEV_strat)
+}
+```
+
+```{r}
+pStrat <- mean(null_distribution_strat >= obs_diff_strat)
+```
+
+Are the results of the stratisfied sample similar to those of the original data set? 
+
+The results are similar in that both tests show a significant difference, with BEVs having greater electric range than PHEVs. However, the stratified sample had an equal number of BEVs and PHEVs, while the original dataset had more BEVs. Because BEVs usually have higher ranges, the original data showed a bigger difference. The stratified sample gives a more balanced view, while the original data reflects the real-world distribution.
+
+
+Why **permutation test** to analyze differences in the MSRP of battery electric vehicles and hybrid vehicles instead of a **t-test**. 
+
+I would prefer to use a permutation test over a t-test to analyze differences in the MSRP of battery electric vehicles and hybrid vehicles because the MSRP data is not normally distributed and contains outliers, including some very expensive cars. A t-test works on data that is normally distributed and that both groups have similar variances, which isn’t true in this case. 
+
